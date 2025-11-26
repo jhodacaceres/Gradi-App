@@ -1,0 +1,20 @@
+# Dependencias (nunca se suben, pesan mucho)
+node_modules/
+venv/
+
+# Archivos de sistema operativo (basura)
+.DS_Store
+Thumbs.db
+
+# Archivos de entorno y secretos (MUY IMPORTANTE)
+.env
+.env.local
+config.js
+
+# Logs y bases de datos locales
+*.log
+*.sqlite
+
+# Carpetas de compilación
+dist/
+build/
