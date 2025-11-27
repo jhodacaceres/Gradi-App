@@ -1,54 +1,59 @@
 import React from 'react';
-import { Home, CheckSquare, Users, User, Settings, LogOut } from 'lucide-react';
-
-type View = 'inicio' | 'tareas' | 'grupos' | 'perfil';
+import { NavLink } from 'react-router-dom';
+import { Home, CheckSquare, Users, Settings, X, Menu } from 'lucide-react';
 
 interface SidebarProps {
-  activeView: View;
-  setActiveView: (view: View) => void;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (isOpen: boolean) => void;
 }
 
-const NavItem = ({ icon: Icon, text, active, onClick }: { icon: React.ElementType, text: string, active: boolean, onClick: () => void }) => (
-  <button 
-    onClick={onClick}
-    className={`flex items-center w-full px-4 py-3 rounded-lg transition-all duration-200 ${
-      active 
-        ? 'bg-gradient-to-r from-brand-purple to-brand-indigo text-white shadow-lg' 
-        : 'text-gray-500 hover:bg-gray-100 hover:text-brand-text-primary'
-    }`}
-  >
-    <Icon size={22} className="mr-4" />
-    <span className="font-semibold">{text}</span>
-  </button>
-);
+const Sidebar = ({ isSidebarOpen, setIsSidebarOpen }: SidebarProps) => {
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex items-center w-full px-4 py-3 rounded-lg transition-colors text-base ${
+      isActive
+        ? 'bg-purple-100 text-brand-purple font-bold'
+        : 'text-brand-text-secondary hover:bg-gray-100'
+    }`;
 
-function Sidebar({ activeView, setActiveView }: SidebarProps) {
   return (
-    <aside className="w-64 bg-white border-r border-gray-100 p-6 flex flex-col justify-between">
-      <div>
-        <div className="flex items-center space-x-3 mb-10">
-          <div className="bg-gradient-to-r from-brand-purple to-brand-indigo p-2 rounded-lg">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-brand-text-primary">Gradi</h1>
+    <>
+      {/* Overlay for mobile */}
+      <div 
+        className={`fixed inset-0 bg-black/40 z-30 transition-opacity lg:hidden ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setIsSidebarOpen(false)}
+      ></div>
+
+      <aside className={`fixed lg:relative flex flex-col w-64 bg-white border-r border-gray-100 h-full z-40 transform transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 h-20">
+          <h1 className="text-2xl font-bold text-brand-purple">Gradi</h1>
+          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-800">
+            <X size={24} />
+          </button>
         </div>
-        <nav className="space-y-3">
-          <NavItem icon={Home} text="Inicio" active={activeView === 'inicio'} onClick={() => setActiveView('inicio')} />
-          <NavItem icon={CheckSquare} text="Tareas" active={activeView === 'tareas'} onClick={() => setActiveView('tareas')} />
-          <NavItem icon={Users} text="Grupos" active={activeView === 'grupos'} onClick={() => setActiveView('grupos')} />
-          <NavItem icon={User} text="Mi Perfil" active={activeView === 'perfil'} onClick={() => setActiveView('perfil')} />
+        <nav className="flex-1 p-4 space-y-2">
+          <NavLink to="/" className={navLinkClass} end>
+            <Home size={22} />
+            <span className="ml-4">Inicio</span>
+          </NavLink>
+          <NavLink to="/tareas" className={navLinkClass}>
+            <CheckSquare size={22} />
+            <span className="ml-4">Tareas</span>
+          </NavLink>
+          <NavLink to="/grupos" className={navLinkClass}>
+            <Users size={22} />
+            <span className="ml-4">Grupos</span>
+          </NavLink>
+          <NavLink to="/configuracion" className={navLinkClass}>
+            <Settings size={22} />
+            <span className="ml-4">Configuración</span>
+          </NavLink>
         </nav>
-      </div>
-      <div className="space-y-3">
-        <NavItem icon={Settings} text="Configuración" active={false} onClick={() => {}} />
-        <NavItem icon={LogOut} text="Cerrar Sesión" active={false} onClick={() => {}} />
-      </div>
-    </aside>
+        <div className="p-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400">&copy; 2025 Gradi. Todos los derechos reservados.</p>
+        </div>
+      </aside>
+    </>
   );
-}
+};
 
 export default Sidebar;

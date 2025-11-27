@@ -1,24 +1,24 @@
 import React, { useState, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { X, Tag, Book, DollarSign, Calendar, UploadCloud, FileText } from 'lucide-react';
+import { X, Tag, Book, DollarSign, Calendar, UploadCloud } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Task } from '../types';
+import { Task, TaskType } from '../types';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onTaskCreated: (newTask: Task) => void;
-  user: User | null;
+  user: User;
 }
 
 const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTaskCreated, user }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [subject, setSubject] = useState('');
-  const [price, setPrice] = useState('');
+  const [price, setPrice] = useState<string>('');
   const [dueDate, setDueDate] = useState('');
-  const [type, setType] = useState<'request' | 'offer'>('request');
+  const [type, setType] = useState<TaskType>('request');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,79 +35,73 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile && selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
+      setError('El archivo no debe superar los 10MB.');
+      setFile(null);
+    } else {
+      setError(null);
+      setFile(selectedFile || null);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      setError('Debes iniciar sesión para crear una tarea.');
-      return;
-    }
-    if (!title || !description || !subject || !price) {
-      setError('Por favor, completa todos los campos obligatorios.');
+    if (!title || !price) {
+      setError('El título y el precio son obligatorios.');
       return;
     }
     
     setIsSubmitting(true);
     setError(null);
-
     let fileUrl: string | null = null;
+    let fileName: string | null = null;
 
-    if (file) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('task_files')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        console.error('Error uploading file:', uploadError);
-        setError('Error al subir el archivo. Asegúrate de que el bucket "task_files" exista y sea público.');
-        setIsSubmitting(false);
-        return;
+    try {
+      if (file) {
+        fileName = file.name;
+        const filePath = `${user.id}/${Date.now()}_${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('task_files').upload(filePath, file);
+        if (uploadError) throw uploadError;
+        
+        const { data: urlData } = supabase.storage.from('task_files').getPublicUrl(filePath);
+        fileUrl = urlData.publicUrl;
       }
 
-      const { data: urlData } = supabase.storage
-        .from('task_files')
-        .getPublicUrl(filePath);
-      
-      fileUrl = urlData.publicUrl;
-    }
+      const { data, error: insertError } = await supabase
+        .from('tasks')
+        .insert({
+          title,
+          description,
+          subject,
+          price: parseFloat(price) || 0,
+          due_date: dueDate || null,
+          type,
+          user_id: user.id,
+          file_url: fileUrl,
+          file_name: fileName,
+        })
+        .select(`*, profiles (*)`)
+        .single();
 
-    const { data, error: insertError } = await supabase
-      .from('tasks')
-      .insert({
-        title,
-        description,
-        subject,
-        price: parseFloat(price),
-        due_date: dueDate || null,
-        type,
-        user_id: user.id,
-        file_url: fileUrl,
-      })
-      .select(`*, profiles (*)`)
-      .single();
+      if (insertError) throw insertError;
 
-    setIsSubmitting(false);
-
-    if (insertError) {
-      console.error('Error creating task:', insertError);
-      setError('No se pudo crear la tarea. Inténtalo de nuevo.');
-    } else if (data) {
-      onTaskCreated(data as Task);
-      onClose();
+      if (data) {
+        onTaskCreated(data as Task);
+        resetForm();
+        onClose();
+      }
+    } catch (err: any) {
+      console.error('Error creating task:', err);
+      setError('No se pudo crear la tarea. Revisa los datos e inténtalo de nuevo.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose} afterLeave={resetForm}>
+      <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -117,7 +111,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-y-auto">
@@ -132,7 +126,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
               leaveTo="opacity-0 scale-95"
             >
               <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-8 text-left align-middle shadow-xl transition-all">
-                <Dialog.Title as="h3" className="text-2xl font-bold leading-6 text-brand-text-primary flex justify-between items-center">
+                <Dialog.Title as="h3" className="text-2xl font-bold leading-6 text-gray-900 flex justify-between items-center">
                   Publicar una nueva tarea
                   <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
                     <X size={24} className="text-gray-500" />
@@ -155,13 +149,13 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
                   </div>
 
                   <div>
-                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" rows={4} placeholder="Describe la tarea en detalle..." required></textarea>
+                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" rows={4} placeholder="Describe la tarea en detalle..."></textarea>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative">
                       <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input type="text" placeholder="Materia (Ej: Cálculo)" value={subject} onChange={e => setSubject(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" required />
+                      <input type="text" placeholder="Materia (Ej: Cálculo)" value={subject} onChange={e => setSubject(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" />
                     </div>
                     <div className="relative">
                       <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -174,23 +168,20 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
                   </div>
 
                   <div>
-                    <label htmlFor="file-upload" className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition">
-                      <UploadCloud size={32} className="text-gray-400 mb-2" />
-                      <span className="text-sm font-semibold text-brand-purple">Adjuntar un archivo</span>
-                      <span className="text-xs text-gray-500">PDF, DOCX, etc. (Opcional)</span>
-                      <input id="file-upload" name="file-upload" type="file" className="hidden" onChange={handleFileChange} />
-                    </label>
-                    {file && (
-                      <div className="mt-3 flex items-center justify-between bg-gray-100 p-2 rounded-lg">
-                        <div className="flex items-center space-x-2">
-                          <FileText size={20} className="text-gray-600" />
-                          <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Archivo adjunto (Opcional, max 10MB)</label>
+                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                      <div className="space-y-1 text-center">
+                        <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                        <div className="flex text-sm text-gray-600">
+                          <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-brand-purple hover:text-brand-indigo focus-within:outline-none">
+                            <span>Sube un archivo</span>
+                            <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
+                          </label>
+                          <p className="pl-1">o arrástralo aquí</p>
                         </div>
-                        <button type="button" onClick={() => setFile(null)} className="p-1 rounded-full hover:bg-gray-200">
-                          <X size={16} className="text-gray-500" />
-                        </button>
+                        {file ? <p className="text-xs text-gray-500 truncate max-w-xs">{file.name}</p> : <p className="text-xs text-gray-500">PDF, DOCX, PNG, JPG, etc.</p>}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {error && <p className="text-red-500 text-sm text-center">{error}</p>}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, FormEvent, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Heart, MessageCircle, Send, Image as ImageIcon, Share2, User as UserIcon, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Post, PostComment } from '../types';
+import { Post, PostComment, Profile } from '../types';
 import { User } from '@supabase/supabase-js';
 import CreatePost from './CreatePost';
 
@@ -12,14 +13,16 @@ interface FeedProps {
 
 const Comment = ({ comment }: { comment: PostComment }) => (
   <div className="flex items-start space-x-3">
-    <img 
-      src={comment.profiles.avatar_url || `https://ui-avatars.com/api/?name=${comment.profiles.full_name}&background=random`} 
-      alt={comment.profiles.full_name || 'User'} 
-      className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-    />
+    <Link to={`/perfil/${comment.profiles.id}`}>
+      <img 
+        src={comment.profiles.avatar_url || `https://ui-avatars.com/api/?name=${comment.profiles.full_name}&background=random`} 
+        alt={comment.profiles.full_name || 'User'} 
+        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+      />
+    </Link>
     <div className="flex-1">
       <div className="bg-gray-100 rounded-xl p-3">
-        <p className="font-semibold text-sm text-brand-text-primary break-words">{comment.profiles.full_name}</p>
+        <Link to={`/perfil/${comment.profiles.id}`} className="font-semibold text-sm text-brand-text-primary break-words hover:underline">{comment.profiles.full_name}</Link>
         {comment.content && <p className="text-sm text-brand-text-secondary break-words whitespace-pre-wrap">{comment.content}</p>}
       </div>
       {comment.image_url && (
@@ -30,7 +33,7 @@ const Comment = ({ comment }: { comment: PostComment }) => (
   </div>
 );
 
-const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null, onAuthAction: () => void }) => {
+export const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null, onAuthAction: () => void }) => {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [commentCount, setCommentCount] = useState(0);
@@ -88,7 +91,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
     if (!post.id) return;
     const { data, error } = await supabase
       .from('post_comments')
-      .select(`id, content, image_url, created_at, profiles!user_id (full_name, avatar_url)`)
+      .select(`id, content, image_url, created_at, profiles!user_id (id, full_name, avatar_url)`)
       .eq('post_id', post.id)
       .order('created_at', { ascending: true });
 
@@ -96,7 +99,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
         console.error("Error fetching comments:", error);
         throw new Error(`Error fetching comments: ${error.message}`);
     }
-    setComments(data as PostComment[] || []);
+    setComments(data as any[] || []);
   };
 
   const handleToggleComments = async () => {
@@ -164,7 +167,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
       const { data: newCommentData, error: insertError } = await supabase
         .from('post_comments')
         .insert(commentPayload)
-        .select(`*, profiles!user_id (full_name, avatar_url)`)
+        .select(`*, profiles!user_id (id, full_name, avatar_url)`)
         .single();
 
       if (insertError) {
@@ -173,7 +176,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
       }
 
       if (newCommentData) {
-        setComments(prevComments => [...prevComments, newCommentData as PostComment]);
+        setComments(prevComments => [...prevComments, newCommentData as any]);
         setCommentCount(prevCount => prevCount + 1);
       }
 
@@ -201,9 +204,11 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
   return (
     <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100">
       <div className="flex items-center mb-4">
-        <img src={post.profiles.avatar_url || `https://ui-avatars.com/api/?name=${post.profiles.full_name}&background=random`} alt={post.profiles.full_name || 'User'} className="w-12 h-12 rounded-full object-cover mr-4" />
+        <Link to={`/perfil/${post.profiles.id}`}>
+          <img src={post.profiles.avatar_url || `https://ui-avatars.com/api/?name=${post.profiles.full_name}&background=random`} alt={post.profiles.full_name || 'User'} className="w-12 h-12 rounded-full object-cover mr-4" />
+        </Link>
         <div>
-          <p className="font-bold text-brand-text-primary">{post.profiles.full_name}</p>
+          <Link to={`/perfil/${post.profiles.id}`} className="font-bold text-brand-text-primary hover:underline">{post.profiles.full_name}</Link>
           <p className="text-sm text-brand-text-secondary">{new Date(post.created_at).toLocaleString()}</p>
         </div>
       </div>
@@ -225,7 +230,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
       </div>
       {showComments && (
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="space-y-4 mb-4 max-h-60 overflow-y-auto pr-2">{comments.map(comment => <Comment key={comment.id} comment={comment} />)}</div>
+          <div className="space-y-4 mb-4 max-h-60 overflow-y-auto pr-2">{comments.map(comment => <Comment key={comment.id} comment={comment as any} />)}</div>
           {user ? (
             <form onSubmit={handleCommentSubmit} className="flex items-start space-x-3">
               <img src={user.user_metadata.avatar_url} alt={user.user_metadata.full_name} className="w-9 h-9 rounded-full object-cover" />
@@ -269,10 +274,9 @@ function Feed({ user, onAuthAction }: FeedProps) {
       setLoading(true);
       setError(null);
       try {
-        // FIX: Explicitly define the foreign key relationship to resolve ambiguity
         const { data, error: fetchError } = await supabase
           .from('posts')
-          .select(`id, content, image_url, created_at, profiles!posts_user_id_fkey (full_name, avatar_url)`)
+          .select(`id, content, image_url, created_at, profiles!posts_user_id_fkey (id, full_name, avatar_url)`)
           .order('created_at', { ascending: false });
 
         if (fetchError) throw fetchError;
