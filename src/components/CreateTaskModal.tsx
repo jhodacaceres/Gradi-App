@@ -1,6 +1,6 @@
 import React, { useState, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { X, Tag, Book, DollarSign, Calendar, Users } from 'lucide-react';
+import { X, Tag, Book, DollarSign, Calendar, UploadCloud, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Task } from '../types';
@@ -19,8 +19,26 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
   const [price, setPrice] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [type, setType] = useState<'request' | 'offer'>('request');
+  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setSubject('');
+    setPrice('');
+    setDueDate('');
+    setType('request');
+    setFile(null);
+    setError(null);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +54,31 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
     setIsSubmitting(true);
     setError(null);
 
+    let fileUrl: string | null = null;
+
+    if (file) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('task_files')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Error uploading file:', uploadError);
+        setError('Error al subir el archivo. Asegúrate de que el bucket "task_files" exista y sea público.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('task_files')
+        .getPublicUrl(filePath);
+      
+      fileUrl = urlData.publicUrl;
+    }
+
     const { data, error: insertError } = await supabase
       .from('tasks')
       .insert({
@@ -46,6 +89,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
         due_date: dueDate || null,
         type,
         user_id: user.id,
+        file_url: fileUrl,
       })
       .select(`*, profiles (*)`)
       .single();
@@ -58,19 +102,12 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
     } else if (data) {
       onTaskCreated(data as Task);
       onClose();
-      // Reset form
-      setTitle('');
-      setDescription('');
-      setSubject('');
-      setPrice('');
-      setDueDate('');
-      setType('request');
     }
   };
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50" onClose={onClose} afterLeave={resetForm}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -114,26 +151,46 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTa
 
                   <div className="relative">
                     <Book className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input type="text" placeholder="Título de la tarea" value={title} onChange={e => setTitle(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" />
+                    <input type="text" placeholder="Título de la tarea" value={title} onChange={e => setTitle(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" required />
                   </div>
 
                   <div>
-                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" rows={4} placeholder="Describe la tarea en detalle..."></textarea>
+                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" rows={4} placeholder="Describe la tarea en detalle..." required></textarea>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative">
                       <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input type="text" placeholder="Materia (Ej: Cálculo)" value={subject} onChange={e => setSubject(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" />
+                      <input type="text" placeholder="Materia (Ej: Cálculo)" value={subject} onChange={e => setSubject(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" required />
                     </div>
                     <div className="relative">
                       <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input type="number" placeholder="Precio / Recompensa" value={price} onChange={e => setPrice(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" min="0" step="0.01" />
+                      <input type="number" placeholder="Precio / Recompensa" value={price} onChange={e => setPrice(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" min="0" step="0.01" required />
                     </div>
                     <div className="relative">
                       <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                       <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" />
                     </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="file-upload" className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition">
+                      <UploadCloud size={32} className="text-gray-400 mb-2" />
+                      <span className="text-sm font-semibold text-brand-purple">Adjuntar un archivo</span>
+                      <span className="text-xs text-gray-500">PDF, DOCX, etc. (Opcional)</span>
+                      <input id="file-upload" name="file-upload" type="file" className="hidden" onChange={handleFileChange} />
+                    </label>
+                    {file && (
+                      <div className="mt-3 flex items-center justify-between bg-gray-100 p-2 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <FileText size={20} className="text-gray-600" />
+                          <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                        </div>
+                        <button type="button" onClick={() => setFile(null)} className="p-1 rounded-full hover:bg-gray-200">
+                          <X size={16} className="text-gray-500" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {error && <p className="text-red-500 text-sm text-center">{error}</p>}

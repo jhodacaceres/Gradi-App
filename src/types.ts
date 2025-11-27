@@ -1,42 +1,56 @@
-import { PostgrestError } from "@supabase/supabase-js"
+import { User } from "@supabase/supabase-js";
 
 export interface Profile {
-  id: string
-  full_name: string | null
-  avatar_url: string | null
-  updated_at: string | null
-  username: string | null
-  website: string | null
+  id: string;
+  full_name: string;
+  avatar_url: string;
+  bio?: string;
+  university?: string;
 }
 
 export interface Post {
-  id: number
-  content: string
-  image_url: string | null
-  created_at: string
-  user_id: string
-  profiles: Profile
+  id: string;
+  user_id: string;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+  profiles: Profile;
 }
 
-export interface PostComment {
-  id: number
-  content: string
-  image_url?: string | null
-  created_at: string
-  post_id: number
-  user_id: string
-  profiles: Profile
+export type TaskType = 'request' | 'offer';
+export type TaskStatus = 'open' | 'in_progress' | 'completed';
+
+export interface Task {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  subject: string;
+  type: TaskType;
+  price: number;
+  due_date: string | null;
+  status: TaskStatus;
+  created_at: string;
+  profiles: Profile;
+  file_url: string | null;
 }
 
 export interface Group {
-  id: number
-  name: string
-  description: string
-  image_url: string | null
-  created_by: string
-  created_at: string
+  id: string;
+  name: string;
+  image_url: string | null;
 }
 
-export type DbResult<T> = T extends PromiseLike<infer U> ? U : never
-export type DbResultOk<T> = T extends PromiseLike<{ data: infer U }> ? Exclude<U, null> : never
-export type DbResultErr = PostgrestError
+export interface PostLike {
+  post_id: string;
+  user_id: string;
+}
+
+export interface PostComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles: Profile;
+}
