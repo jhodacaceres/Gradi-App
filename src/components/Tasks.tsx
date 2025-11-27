@@ -1,177 +1,233 @@
-import React, { useState, useEffect } from 'react';
-import { Task } from '../types';
-import { Calendar, Tag, DollarSign, PlusCircle, Search, ArrowRight, Paperclip } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
-import CreateTaskModal from './CreateTaskModal';
+import { supabase } from '../lib/supabase';
+import { Task, TaskStatus, TaskType } from '../types';
+import { Plus, UploadCloud, FileText, X, Briefcase, Search, DollarSign, Calendar, Tag } from 'lucide-react';
 
 interface TasksProps {
   user: User | null;
+  onAuthAction: () => void;
 }
 
-const TaskCard = ({ task }: { task: Task }) => {
-  const typeStyles = {
-    request: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'SOLICITUD' },
-    offer: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'OFERTA' }
+const TaskCard = ({ task }: { task: Task }) => (
+  <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-purple transition-all duration-300">
+    <div className="flex justify-between items-start">
+      <h3 className="font-bold text-lg text-brand-text-primary mb-2">{task.title}</h3>
+      <span className={`px-3 py-1 text-xs font-semibold rounded-full ${task.type === 'offer' ? 'bg-sky-100 text-sky-700' : 'bg-emerald-100 text-emerald-700'}`}>
+        {task.type === 'offer' ? 'Oferta' : 'Solicitud'}
+      </span>
+    </div>
+    <p className="text-sm text-brand-text-secondary mb-3 line-clamp-2">{task.description}</p>
+    <div className="flex flex-wrap gap-2 text-xs text-brand-text-secondary mb-4">
+      <span className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded"><Tag size={14} /> {task.subject || 'General'}</span>
+      <span className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded"><DollarSign size={14} /> {task.price}</span>
+      {task.due_date && <span className="flex items-center gap-1.5 bg-gray-100 px-2 py-1 rounded"><Calendar size={14} /> {new Date(task.due_date).toLocaleDateString()}</span>}
+    </div>
+    {task.file_url && (
+      <a href={task.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-brand-purple hover:underline mb-4">
+        <FileText size={16} />
+        <span>{task.file_name || 'Ver archivo adjunto'}</span>
+      </a>
+    )}
+    <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <img src={task.profiles.avatar_url} alt={task.profiles.full_name} className="w-8 h-8 rounded-full" />
+        <span className="text-sm font-medium text-brand-text-secondary">{task.profiles.full_name}</span>
+      </div>
+      <button className="px-4 py-1.5 text-sm font-semibold text-white bg-brand-purple rounded-lg hover:bg-brand-indigo transition-colors">
+        Ver Detalles
+      </button>
+    </div>
+  </div>
+);
+
+const CreateTaskModal = ({ user, onClose, onTaskCreated }: { user: User, onClose: () => void, onTaskCreated: (task: Task) => void }) => {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState('');
+  const [type, setType] = useState<TaskType>('request');
+  const [price, setPrice] = useState<number | ''>('');
+  const [dueDate, setDueDate] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile && selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
+      setError('El archivo no debe superar los 10MB.');
+      setFile(null);
+    } else {
+      setError(null);
+      setFile(selectedFile || null);
+    }
   };
-  const currentStyle = typeStyles[task.type];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || price === '') return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    let fileUrl: string | null = null;
+    let fileName: string | null = null;
+
+    try {
+      if (file) {
+        fileName = file.name;
+        const filePath = `${user.id}/task_files/${Date.now()}_${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('task_files').upload(filePath, file);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('task_files').getPublicUrl(filePath);
+        fileUrl = urlData.publicUrl;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: user.id,
+          title,
+          description,
+          subject,
+          type,
+          price: price || 0,
+          due_date: dueDate || null,
+          file_url: fileUrl,
+          file_name: fileName,
+        })
+        .select('*, profiles!user_id(*)')
+        .single();
+
+      if (insertError) throw insertError;
+      
+      onTaskCreated(data as Task);
+      onClose();
+
+    } catch (err: any) {
+      console.error("Error creating task:", err);
+      setError("No se pudo crear la tarea. Inténtalo de nuevo.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between transition-transform transform hover:-translate-y-1 hover:shadow-lg">
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <img src={task.profiles.avatar_url || `https://ui-avatars.com/api/?name=${task.profiles.full_name}&background=random`} alt={task.profiles.full_name || 'User'} className="w-10 h-10 rounded-full object-cover" />
-            <span className="font-semibold text-brand-text-primary">{task.profiles.full_name}</span>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div ref={modalRef} className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-brand-text-primary">Crear nueva tarea</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100"><X size={24} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Form fields here */}
+          <input type="text" placeholder="Título de la tarea" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg" required />
+          <textarea placeholder="Descripción detallada" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg" rows={4}></textarea>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="text" placeholder="Asignatura (e.g. Cálculo)" value={subject} onChange={e => setSubject(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg" />
+            <input type="number" placeholder="Precio/Recompensa (€)" value={price} onChange={e => setPrice(parseFloat(e.target.value))} className="w-full p-3 border border-gray-200 rounded-lg" required min="0" step="0.01" />
           </div>
-          <span className={`px-3 py-1 text-xs font-bold rounded-full ${currentStyle.bg} ${currentStyle.text}`}>{currentStyle.label}</span>
-        </div>
-        <h3 className="text-lg font-bold text-brand-text-primary mb-2">{task.title}</h3>
-        <p className="text-brand-text-secondary text-sm mb-4 line-clamp-2">{task.description}</p>
-        {task.file_url && (
-          <a
-            href={task.file_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-2 text-sm text-brand-purple hover:underline mb-4 group"
-          >
-            <Paperclip size={16} />
-            <span className="group-hover:font-semibold">Ver archivo adjunto</span>
-          </a>
-        )}
-      </div>
-      <div>
-        <div className="border-t border-gray-100 pt-4 mb-4 flex items-center justify-between text-sm text-gray-500">
-          <div className="flex items-center space-x-2"><Tag size={16} /><span>{task.subject}</span></div>
-          <div className="flex items-center space-x-2"><Calendar size={16} /><span>{task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}</span></div>
-          <div className="flex items-center space-x-1 font-bold text-brand-purple"><DollarSign size={16} /><span>{task.price.toFixed(2)}</span></div>
-        </div>
-        <button className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-xl shadow-md hover:shadow-lg transition-all duration-300 group">
-          <span>Ver Detalles</span>
-          <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
-        </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select value={type} onChange={e => setType(e.target.value as TaskType)} className="w-full p-3 border border-gray-200 rounded-lg bg-white">
+              <option value="request">Solicito Ayuda</option>
+              <option value="offer">Ofrezco Ayuda</option>
+            </select>
+            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-brand-text-secondary mb-2">Archivo adjunto (Opcional, max 10MB)</label>
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div className="space-y-1 text-center">
+                <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="flex text-sm text-gray-600">
+                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-brand-purple hover:text-brand-indigo focus-within:outline-none">
+                    <span>Sube un archivo</span>
+                    <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
+                  </label>
+                  <p className="pl-1">o arrástralo aquí</p>
+                </div>
+                {file ? <p className="text-xs text-gray-500">{file.name}</p> : <p className="text-xs text-gray-500">PDF, DOCX, PNG, JPG, etc.</p>}
+              </div>
+            </div>
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <div className="flex justify-end gap-4 pt-4">
+            <button type="button" onClick={onClose} className="px-6 py-2.5 font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancelar</button>
+            <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-lg shadow-sm hover:shadow-md disabled:opacity-50">
+              {isSubmitting ? 'Creando...' : 'Crear Tarea'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 };
 
-const FilterButton = ({ text, active, onClick }: { text: string, active: boolean, onClick: () => void }) => (
-  <button
-    onClick={onClick}
-    className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-300 ${active ? 'bg-gradient-to-r from-brand-purple to-brand-indigo text-white shadow-md' : 'bg-white text-brand-text-secondary hover:bg-gray-100 border'}`}
-  >
-    {text}
-  </button>
-);
-
-function Tasks({ user }: TasksProps) {
+const Tasks = ({ user, onAuthAction }: TasksProps) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'request' | 'offer'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     const fetchTasks = async () => {
       setLoading(true);
-      let query = supabase
+      const { data, error } = await supabase
         .from('tasks')
-        .select(`
-          *,
-          profiles (
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*, profiles!user_id(full_name, avatar_url)')
         .order('created_at', { ascending: false });
-
-      if (filter !== 'all') {
-        query = query.eq('type', filter);
-      }
       
-      if (searchTerm) {
-        query = query.textSearch('title', `'${searchTerm}'`);
-      }
-
-      const { data, error } = await query;
-
       if (error) {
-        console.error('Error fetching tasks:', error);
-        setError('No se pudieron cargar las tareas.');
+        console.error("Error fetching tasks:", error);
+        setError("No se pudieron cargar las tareas.");
       } else {
-        setTasks(data as any);
+        setTasks(data as Task[]);
       }
       setLoading(false);
     };
-
     fetchTasks();
-  }, [filter, searchTerm]);
+  }, []);
 
-  const handleTaskCreated = (newTask: Task) => {
-    setTasks(prevTasks => [newTask, ...prevTasks]);
+  const handleCreateTaskClick = () => {
+    if (user) {
+      setShowModal(true);
+    } else {
+      onAuthAction();
+    }
   };
 
   return (
-    <>
-      <CreateTaskModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onTaskCreated={handleTaskCreated}
-        user={user}
-      />
-      <div className="max-w-7xl mx-auto">
-        <header className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-brand-text-primary">Mercado de Tareas</h1>
-              <p className="text-brand-text-secondary mt-1">Encuentra ayuda o comparte tus conocimientos.</p>
-            </div>
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              disabled={!user}
-              className="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-3 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!user ? "Inicia sesión para publicar una tarea" : "Publicar una nueva tarea"}
-            >
-              <PlusCircle size={20} />
-              <span>Publicar Tarea</span>
-            </button>
-          </div>
-          <div className="border-t border-gray-100 mt-6 pt-6 flex flex-col md:flex-row items-center gap-4">
-            <div className="relative w-full md:flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text"
-                placeholder="Buscar por título, materia..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition"
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <FilterButton text="Todos" active={filter === 'all'} onClick={() => setFilter('all')} />
-              <FilterButton text="Solicitudes" active={filter === 'request'} onClick={() => setFilter('request')} />
-              <FilterButton text="Ofertas" active={filter === 'offer'} onClick={() => setFilter('offer')} />
-            </div>
-          </div>
-        </header>
-
-        {loading && <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-purple"></div></div>}
-        {error && <p className="text-red-500 text-center py-10">{error}</p>}
-        
-        {!loading && tasks.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tasks.map(task => <TaskCard key={task.id} task={task} />)}
-          </div>
-        ) : (
-          !loading && <div className="bg-white text-center p-12 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="text-xl font-semibold text-brand-text-primary">No se encontraron tareas</h3>
-            <p className="text-brand-text-secondary mt-2">Intenta con otra búsqueda o sé el primero en publicar.</p>
-          </div>
-        )}
+    <div className="max-w-6xl mx-auto">
+      {showModal && user && <CreateTaskModal user={user} onClose={() => setShowModal(false)} onTaskCreated={(newTask) => setTasks([newTask, ...tasks])} />}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-brand-text-primary">Mercado de Tareas</h1>
+          <p className="text-brand-text-secondary mt-1">Encuentra u ofrece ayuda para tus trabajos universitarios.</p>
+        </div>
+        <button onClick={handleCreateTaskClick} className="flex items-center gap-2 px-5 py-3 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-lg shadow-sm hover:shadow-md transition-shadow w-full md:w-auto">
+          <Plus size={20} />
+          <span>Publicar Tarea</span>
+        </button>
       </div>
-    </>
+
+      {loading && <p>Cargando tareas...</p>}
+      {error && <p className="text-red-500">{error}</p>}
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {tasks.map(task => <TaskCard key={task.id} task={task} />)}
+      </div>
+    </div>
   );
-}
+};
 
 export default Tasks;

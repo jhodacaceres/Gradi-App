@@ -88,7 +88,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
     if (!post.id) return;
     const { data, error } = await supabase
       .from('post_comments')
-      .select(`id, content, image_url, created_at, profiles (full_name, avatar_url)`)
+      .select(`id, content, image_url, created_at, profiles!user_id (full_name, avatar_url)`)
       .eq('post_id', post.id)
       .order('created_at', { ascending: true });
 
@@ -164,7 +164,7 @@ const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User | null,
       const { data: newCommentData, error: insertError } = await supabase
         .from('post_comments')
         .insert(commentPayload)
-        .select(`*, profiles (full_name, avatar_url)`)
+        .select(`*, profiles!user_id (full_name, avatar_url)`)
         .single();
 
       if (insertError) {
@@ -271,7 +271,7 @@ function Feed({ user, onAuthAction }: FeedProps) {
       try {
         const { data, error: fetchError } = await supabase
           .from('posts')
-          .select(`id, content, image_url, created_at, profiles (full_name, avatar_url)`)
+          .select(`id, content, image_url, created_at, profiles!user_id (full_name, avatar_url)`)
           .order('created_at', { ascending: false });
 
         if (fetchError) throw fetchError;

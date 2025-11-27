@@ -4,8 +4,6 @@ export interface Profile {
   id: string;
   full_name: string;
   avatar_url: string;
-  bio?: string;
-  university?: string;
 }
 
 export interface Post {
@@ -30,9 +28,10 @@ export interface Task {
   price: number;
   due_date: string | null;
   status: TaskStatus;
+  file_url: string | null;
+  file_name: string | null;
   created_at: string;
   profiles: Profile;
-  file_url: string | null;
 }
 
 export interface Group {
@@ -50,7 +49,8 @@ export interface PostComment {
   id: string;
   post_id: string;
   user_id: string;
-  content: string;
+  content: string | null;
+  image_url: string | null;
   created_at: string;
   profiles: Profile;
 }

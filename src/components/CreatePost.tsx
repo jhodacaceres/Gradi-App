@@ -44,7 +44,7 @@ const CreatePost = ({ user, onPostCreated, onAuthAction }: { user: User | null, 
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
     const contentToInsert = content.trim();
-    if (!contentToInsert || !user) return;
+    if ((!contentToInsert && !imageFile) || !user) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -75,7 +75,7 @@ const CreatePost = ({ user, onPostCreated, onAuthAction }: { user: User | null, 
           user_id: user.id,
           image_url: imageUrl
         })
-        .select(`*, profiles (*)`)
+        .select(`*, profiles!user_id (*)`)
         .single();
 
       if (insertError) {
@@ -155,7 +155,7 @@ const CreatePost = ({ user, onPostCreated, onAuthAction }: { user: User | null, 
               className="hidden"
               accept="image/png, image/jpeg, image/gif, image/webp"
             />
-            <button type="submit" className="px-6 py-2.5 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-lg shadow-sm hover:shadow-md transition-shadow disabled:opacity-50 disabled:cursor-wait" disabled={!content.trim() || isSubmitting}>
+            <button type="submit" className="px-6 py-2.5 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-lg shadow-sm hover:shadow-md transition-shadow disabled:opacity-50 disabled:cursor-not-allowed" disabled={(!content.trim() && !imageFile) || isSubmitting}>
               {isSubmitting ? 'Publicando...' : 'Publicar'}
             </button>
           </div>
