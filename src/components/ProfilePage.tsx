@@ -8,24 +8,29 @@ interface ProfilePageProps {
 
 const ProfilePage = ({ user }: ProfilePageProps) => {
   const [fullName, setFullName] = useState('');
+  const [bio, setBio] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   useEffect(() => {
     if (user) {
       setFullName(user.user_metadata.full_name || '');
+      setBio(user.user_metadata.bio || '');
     }
   }, [user]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !fullName.trim()) return;
+    if (!user) return;
 
     setLoading(true);
     setMessage(null);
 
     const { data, error } = await supabase.auth.updateUser({
-      data: { full_name: fullName.trim() }
+      data: { 
+        full_name: fullName.trim(),
+        bio: bio.trim()
+      }
     });
 
     if (error) {
@@ -67,6 +72,18 @@ const ProfilePage = ({ user }: ProfilePageProps) => {
               onChange={(e) => setFullName(e.target.value)}
               className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition"
               required
+            />
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="bio" className="block text-sm font-medium text-brand-text-secondary mb-2">Biografía</label>
+            <textarea
+              id="bio"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition"
+              rows={4}
+              placeholder="Cuéntanos un poco sobre ti..."
             />
           </div>
           

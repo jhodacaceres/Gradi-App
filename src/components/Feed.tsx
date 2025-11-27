@@ -269,9 +269,10 @@ function Feed({ user, onAuthAction }: FeedProps) {
       setLoading(true);
       setError(null);
       try {
+        // FIX: Explicitly define the foreign key relationship to resolve ambiguity
         const { data, error: fetchError } = await supabase
           .from('posts')
-          .select(`id, content, image_url, created_at, profiles!user_id (full_name, avatar_url)`)
+          .select(`id, content, image_url, created_at, profiles!posts_user_id_fkey (full_name, avatar_url)`)
           .order('created_at', { ascending: false });
 
         if (fetchError) throw fetchError;
