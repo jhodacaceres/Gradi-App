@@ -27,9 +27,9 @@ function App() {
       case 'inicio':
         return <Feed user={user} onAuthAction={handleAuthAction} />;
       case 'tareas':
-        return <Tasks user={user} />;
+        return <Tasks user={user} onAuthAction={handleAuthAction} />;
       case 'grupos':
-        return <Groups />;
+        return <Groups user={user} onAuthAction={handleAuthAction} />;
       default:
         return <Feed user={user} onAuthAction={handleAuthAction} />;
     }
