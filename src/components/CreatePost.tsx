@@ -43,7 +43,8 @@ const CreatePost = ({ user, onPostCreated, onAuthAction }: { user: User | null, 
 
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || !user) return;
+    const contentToInsert = content.trim();
+    if (!contentToInsert || !user) return;
 
     setIsSubmitting(true);
     setError(null);
@@ -70,7 +71,7 @@ const CreatePost = ({ user, onPostCreated, onAuthAction }: { user: User | null, 
       const { data, error: insertError } = await supabase
         .from('posts')
         .insert({ 
-          content, 
+          content: contentToInsert, 
           user_id: user.id,
           image_url: imageUrl
         })
