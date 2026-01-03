@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 
 interface SettingsPageProps {
   user: User | null;
+  onAuthAction: () => void; // Añadido para consistencia con las props pasadas por el router
 }
 
 const SettingsPage = ({ user }: SettingsPageProps) => {

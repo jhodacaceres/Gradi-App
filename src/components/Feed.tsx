@@ -59,8 +59,19 @@ export const PostCard = ({ post, user, onAuthAction }: { post: Post, user: User 
       setCommentCount(commentsCount ?? 0);
 
       if (user) {
-        const { data: userLike } = await supabase.from('post_likes').select('post_id').eq('post_id', post.id).eq('user_id', user.id).single();
-        setIsLiked(!!userLike);
+        // FIX: Reemplazamos .single() por select estándar para evitar el error 406
+        const { data: userLikes, error: likeError } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .eq('post_id', post.id)
+          .eq('user_id', user.id);
+
+        if (likeError) {
+          console.error("Error checking user like status:", likeError);
+          setIsLiked(false);
+        } else {
+          setIsLiked(userLikes && userLikes.length > 0);
+        }
       } else {
         setIsLiked(false);
       }

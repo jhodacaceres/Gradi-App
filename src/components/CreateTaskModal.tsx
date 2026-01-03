@@ -1,204 +1,283 @@
-import React, { useState, Fragment } from 'react';
-import { Dialog, Transition } from '@headlessui/react';
-import { X, Tag, Book, DollarSign, Calendar, UploadCloud } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  X, 
+  Upload, 
+  Loader2, 
+  Type, 
+  AlignLeft, 
+  Tag, 
+  DollarSign, 
+  MessageCircle 
+} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Task, TaskType } from '../types';
 
 interface CreateTaskModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
-  onTaskCreated: (newTask: Task) => void;
-  user: User;
+  onTaskCreated: (task: any) => void;
+  user?: User | null;
 }
 
-const CreateTaskModal: React.FC<CreateTaskModalProps> = ({ isOpen, onClose, onTaskCreated, user }) => {
+export function CreateTaskModal({ onClose, onTaskCreated, user }: CreateTaskModalProps) {
+  const [loading, setLoading] = useState(false);
+  
+  // Estados
+  const [type, setType] = useState<'request' | 'offer'>('request');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [subject, setSubject] = useState('');
-  const [price, setPrice] = useState<string>('');
-  const [dueDate, setDueDate] = useState('');
-  const [type, setType] = useState<TaskType>('request');
+  const [price, setPrice] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setSubject('');
-    setPrice('');
-    setDueDate('');
-    setType('request');
-    setFile(null);
-    setError(null);
-  };
-
+  // --- NUEVA FUNCIÓN PARA VALIDAR EL ARCHIVO ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
-      setError('El archivo no debe superar los 10MB.');
-      setFile(null);
-    } else {
-      setError(null);
-      setFile(selectedFile || null);
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      
+      // 20 MB en bytes = 20 * 1024 * 1024
+      const maxSizeInBytes = 20 * 1024 * 1024;
+
+      if (selectedFile.size > maxSizeInBytes) {
+        // Alerta nativa (o podrías usar un modal custom)
+        alert("⚠️ El archivo es demasiado pesado.\n\nEl límite máximo permitido es de 20 MB.");
+        
+        // Limpiamos el input para que no se quede seleccionado
+        e.target.value = ''; 
+        setFile(null);
+        return;
+      }
+
+      setFile(selectedFile);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !price) {
-      setError('El título y el precio son obligatorios.');
-      return;
-    }
-    
-    setIsSubmitting(true);
-    setError(null);
-    let fileUrl: string | null = null;
-    let fileName: string | null = null;
+    if (!user) return;
+    setLoading(true);
 
     try {
+      let fileUrl = null;
+      let fileName = null;
+
       if (file) {
-        fileName = file.name;
-        const filePath = `${user.id}/${Date.now()}_${fileName}`;
-        const { error: uploadError } = await supabase.storage.from('task_files').upload(filePath, file);
-        if (uploadError) throw uploadError;
+        // Doble verificación de seguridad antes de subir
+        if (file.size > 20 * 1024 * 1024) {
+             throw new Error("El archivo supera los 20MB permitidos.");
+        }
+
+        // Usamos 'task-files' (con guion medio)
+        const fileExt = file.name.split('.').pop();
+        // Usamos un nombre único para evitar colisiones
+        const filePath = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         
-        const { data: urlData } = supabase.storage.from('task_files').getPublicUrl(filePath);
-        fileUrl = urlData.publicUrl;
+        const { error: uploadError } = await supabase.storage
+          .from('task_files') 
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('task_files')
+          .getPublicUrl(filePath);
+          
+        fileUrl = publicUrlData.publicUrl;
+        fileName = file.name;
       }
 
-      const { data, error: insertError } = await supabase
+      const { data, error } = await supabase
         .from('tasks')
-        .insert({
-          title,
-          description,
-          subject,
-          price: parseFloat(price) || 0,
-          due_date: dueDate || null,
-          type,
-          user_id: user.id,
-          file_url: fileUrl,
-          file_name: fileName,
-        })
-        .select(`*, profiles (*)`)
+        .insert([{
+            title,
+            description,
+            price: parseFloat(price) || 0,
+            subject,
+            type,
+            contact_info: contactInfo,
+            user_id: user.id,
+            file_url: fileUrl,
+            file_name: fileName,
+            status: 'open'
+        }])
+        .select()
         .single();
 
-      if (insertError) throw insertError;
+      if (error) throw error;
+      if (onTaskCreated) onTaskCreated(data);
+      onClose();
 
-      if (data) {
-        onTaskCreated(data as Task);
-        resetForm();
-        onClose();
-      }
-    } catch (err: any) {
-      console.error('Error creating task:', err);
-      setError('No se pudo crear la tarea. Revisa los datos e inténtalo de nuevo.');
+    } catch (error: any) {
+      console.error('Error creating task:', error);
+      alert('Error: ' + error.message);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
-        <Transition.Child
-          as={Fragment}
-          enter="ease-out duration-300"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-200"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl w-full max-w-2xl p-8 relative shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+        
+        {/* Botón Cerrar */}
+        <button 
+          onClick={onClose} 
+          className="absolute right-6 top-6 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all z-10"
         >
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-        </Transition.Child>
+          <X size={24} />
+        </button>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4 text-center">
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out duration-300"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-8 text-left align-middle shadow-xl transition-all">
-                <Dialog.Title as="h3" className="text-2xl font-bold leading-6 text-gray-900 flex justify-between items-center">
-                  Publicar una nueva tarea
-                  <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
-                    <X size={24} className="text-gray-500" />
-                  </button>
-                </Dialog.Title>
+        <h2 className="text-2xl font-bold text-gray-900 mb-6 flex-shrink-0">Publicar una nueva tarea</h2>
+
+        <div className="overflow-y-auto pr-2 -mr-2">
+          <form onSubmit={handleSubmit}>
+            
+            {/* Selector de Tipo */}
+            <div className="flex gap-4 mb-6">
+              <button
+                type="button"
+                onClick={() => setType('request')}
+                className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                  type === 'request'
+                    ? 'bg-brand-purple text-white shadow-lg shadow-brand-purple/25 translate-y-[-2px]'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Necesito Ayuda (Solicitud)
+              </button>
+              <button
+                type="button"
+                onClick={() => setType('offer')}
+                className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                  type === 'offer'
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 translate-y-[-2px]'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Ofrezco Ayuda (Oferta)
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              
+              {/* Título */}
+              <div className="relative group">
+                <Type className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand-purple transition-colors" size={20} />
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple outline-none transition-all"
+                  placeholder="Título de la tarea (Ej: Resolver ejercicios de Física)"
+                />
+              </div>
+
+              {/* Descripción */}
+              <div className="relative group">
+                <AlignLeft className="absolute left-4 top-4 text-gray-400 group-focus-within:text-brand-purple transition-colors" size={20} />
+                <textarea
+                  required
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple outline-none transition-all resize-none"
+                  placeholder="Describe la tarea en detalle..."
+                />
+              </div>
+
+              {/* Grid de 3 columnas */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
-                <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-                  <div className="flex space-x-4">
-                    <button type="button" onClick={() => setType('request')} className={`flex-1 py-3 rounded-lg font-semibold transition-all ${type === 'request' ? 'bg-gradient-to-r from-brand-purple to-brand-indigo text-white shadow-md' : 'bg-gray-100 text-gray-600'}`}>
-                      Necesito Ayuda (Solicitud)
-                    </button>
-                    <button type="button" onClick={() => setType('offer')} className={`flex-1 py-3 rounded-lg font-semibold transition-all ${type === 'offer' ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md' : 'bg-gray-100 text-gray-600'}`}>
-                      Ofrezco Ayuda (Oferta)
-                    </button>
-                  </div>
+                {/* Materia */}
+                <div className="relative group">
+                  <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand-purple transition-colors" size={18} />
+                  <input
+                    type="text"
+                    required
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple outline-none transition-all text-sm"
+                    placeholder="Materia (Ej: Cálculo)"
+                  />
+                </div>
 
-                  <div className="relative">
-                    <Book className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input type="text" placeholder="Título de la tarea" value={title} onChange={e => setTitle(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" required />
-                  </div>
+                {/* Precio */}
+                <div className="relative group">
+                  <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand-purple transition-colors" size={18} />
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple outline-none transition-all text-sm"
+                    placeholder="Precio"
+                  />
+                </div>
 
-                  <div>
-                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" rows={4} placeholder="Describe la tarea en detalle..."></textarea>
-                  </div>
+                {/* Contacto */}
+                <div className="relative group">
+                  <MessageCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-brand-purple transition-colors" size={18} />
+                  <input
+                    type="text"
+                    required
+                    value={contactInfo}
+                    onChange={(e) => setContactInfo(e.target.value)}
+                    className="w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-purple/20 focus:border-brand-purple outline-none transition-all text-sm"
+                    placeholder="WhatsApp o Correo"
+                  />
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="relative">
-                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input type="text" placeholder="Materia (Ej: Cálculo)" value={subject} onChange={e => setSubject(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" />
+              {/* Subida de Archivo (Con validación 20MB) */}
+              <div className="relative">
+                <input 
+                  type="file" 
+                  onChange={handleFileChange} // <--- AQUÍ USAMOS LA NUEVA FUNCIÓN
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${file ? 'border-brand-purple bg-brand-purple/5' : 'border-gray-200 hover:border-brand-purple/50 hover:bg-gray-50'}`}>
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className={`p-3 rounded-full ${file ? 'bg-brand-purple/10 text-brand-purple' : 'bg-gray-100 text-gray-400'}`}>
+                      <Upload size={24} />
                     </div>
-                    <div className="relative">
-                      <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input type="number" placeholder="Precio / Recompensa" value={price} onChange={e => setPrice(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" min="0" step="0.01" required />
-                    </div>
-                    <div className="relative">
-                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-purple focus:outline-none transition" />
-                    </div>
+                    {file ? (
+                      <span className="text-sm font-medium text-brand-purple">{file.name} ({(file.size / (1024*1024)).toFixed(2)} MB)</span>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium text-gray-700">Sube un archivo adjunto</span>
+                        <span className="text-xs text-gray-400">PDF, Imágenes o Word (Max 10MB)</span>
+                      </>
+                    )}
                   </div>
+                </div>
+              </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Archivo adjunto (Opcional, max 10MB)</label>
-                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                      <div className="space-y-1 text-center">
-                        <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                        <div className="flex text-sm text-gray-600">
-                          <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-brand-purple hover:text-brand-indigo focus-within:outline-none">
-                            <span>Sube un archivo</span>
-                            <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
-                          </label>
-                          <p className="pl-1">o arrástralo aquí</p>
-                        </div>
-                        {file ? <p className="text-xs text-gray-500 truncate max-w-xs">{file.name}</p> : <p className="text-xs text-gray-500">PDF, DOCX, PNG, JPG, etc.</p>}
-                      </div>
-                    </div>
-                  </div>
+            </div>
 
-                  {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
-                  <div className="mt-8 flex justify-end">
-                    <button type="submit" disabled={isSubmitting} className="px-8 py-3 font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-indigo rounded-lg shadow-sm hover:shadow-md transition-shadow disabled:opacity-50 disabled:cursor-wait">
-                      {isSubmitting ? 'Publicando...' : 'Publicar Tarea'}
-                    </button>
-                  </div>
-                </form>
-              </Dialog.Panel>
-            </Transition.Child>
-          </div>
+            {/* Botón Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-6 py-4 bg-gradient-to-r from-brand-purple to-brand-indigo text-white font-bold rounded-xl shadow-lg shadow-brand-purple/25 hover:shadow-brand-purple/40 hover:scale-[1.01] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin" size={20} />
+                  Publicando...
+                </>
+              ) : (
+                'Publicar Tarea'
+              )}
+            </button>
+          </form>
         </div>
-      </Dialog>
-    </Transition>
+      </div>
+    </div>
   );
-};
+}
 
 export default CreateTaskModal;
