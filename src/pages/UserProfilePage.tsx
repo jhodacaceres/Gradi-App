@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Profile, Post } from '../types'; // Usamos el tipo Profile de ../types
+import { Profile, Post } from '../types';
 import { PostCard } from '../components/Feed';
-import { Edit } from 'lucide-react';
+import { Edit, Share2 } from 'lucide-react'; // Agregué Share2 por si quieres un botón extra visual
 
 interface UserProfilePageProps {
   currentUser: User | null;
@@ -26,7 +26,7 @@ const UserProfilePage = ({ currentUser, onAuthAction }: UserProfilePageProps) =>
       setError(null);
 
       try {
-        // Fetch profile details
+        // 1. Obtener datos del perfil
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -38,7 +38,7 @@ const UserProfilePage = ({ currentUser, onAuthAction }: UserProfilePageProps) =>
         }
         setProfile(profileData);
 
-        // Fetch user's posts
+        // 2. Obtener publicaciones del usuario
         const { data: postsData, error: postsError } = await supabase
           .from('posts')
           .select(`*, profiles!posts_user_id_fkey (id, full_name, avatar_url)`)
@@ -63,52 +63,87 @@ const UserProfilePage = ({ currentUser, onAuthAction }: UserProfilePageProps) =>
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-brand-purple"></div>
+      <div className="flex items-center justify-center h-full pt-20">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-purple-600"></div>
       </div>
     );
   }
 
   if (error) {
-    return <div className="text-center p-8 text-error">{error}</div>;
+    return <div className="text-center p-8 text-red-500 font-medium">{error}</div>;
   }
 
   if (!profile) {
-    return <div className="text-center p-8 text-textSecondary">Perfil no encontrado.</div>;
+    return <div className="text-center p-8 text-gray-500">Perfil no encontrado.</div>;
   }
 
   const isOwnProfile = currentUser?.id === profile.id;
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-surface p-8 rounded-2xl shadow-xl border border-border mb-8">
-        <div className="flex flex-col sm:flex-row items-center space-y-6 sm:space-y-0 sm:space-x-8">
-          <img 
-            src={profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.full_name}&background=9E7FFF&color=fff`} 
-            alt={profile.full_name || 'Usuario'} 
-            className="w-32 h-32 rounded-full object-cover border-4 border-background shadow-lg"
-          />
-          <div className="text-center sm:text-left flex-1">
-            <div className="flex items-center justify-center sm:justify-start space-x-4">
-              <h1 className="text-3xl font-bold text-white">{profile.full_name}</h1>
+    <div className="max-w-4xl mx-auto px-4 pb-12">
+      
+      {/* --- TARJETA DE PERFIL --- */}
+      <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
+        
+        {/* 1. Portada / Banner (Gradiente) */}
+        <div className="h-40 w-full bg-gradient-to-r from-purple-600 to-indigo-600"></div>
+
+        {/* 2. Contenido del Perfil */}
+        <div className="px-6 pb-8">
+          
+          {/* Contenedor del Avatar (Margen negativo para subirlo) */}
+          <div className="relative flex flex-col items-center -mt-16">
+            
+            {/* Imagen del Avatar */}
+            <img 
+              src={profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.full_name}&background=9E7FFF&color=fff`} 
+              alt={profile.full_name || 'Usuario'} 
+              className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg bg-white"
+            />
+
+            {/* Texto: Nombre y Bio (Colores Oscuros para fondo blanco) */}
+            <div className="mt-4 text-center">
+              <h1 className="text-3xl font-bold text-gray-900">
+                {profile.full_name}
+              </h1>
+              <p className="mt-2 text-gray-500 max-w-lg mx-auto">
+                {profile.bio || 'Este usuario aún no ha añadido una biografía.'}
+              </p>
+            </div>
+
+            {/* Botones de Acción */}
+            <div className="mt-6 flex gap-3">
               {isOwnProfile && (
-                <Link to="/configuracion" className="p-2 rounded-full bg-background hover:bg-border transition-colors">
-                  <Edit size={18} className="text-textSecondary" />
+                <Link 
+                  to="/configuracion" 
+                  className="flex items-center gap-2 px-5 py-2 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition font-medium shadow-md shadow-purple-200"
+                >
+                  <Edit size={18} />
+                  <span>Editar Perfil</span>
                 </Link>
               )}
             </div>
-            <p className="text-textSecondary mt-2">{profile.bio || 'Este usuario aún no ha añadido una biografía.'}</p>
+
           </div>
         </div>
       </div>
 
-      <h2 className="text-2xl font-bold text-white mb-6">Publicaciones</h2>
+      {/* --- LISTA DE PUBLICACIONES --- */}
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 pl-2">Publicaciones</h2>
+      
       <div className="space-y-6">
         {posts.length > 0 ? (
-          posts.map(post => <PostCard key={post.id} post={post} user={currentUser} onAuthAction={onAuthAction} />)
+          posts.map(post => (
+            <PostCard 
+              key={post.id} 
+              post={post} 
+              user={currentUser} 
+              onAuthAction={onAuthAction} 
+            />
+          ))
         ) : (
-          <div className="text-center py-10 bg-surface rounded-2xl shadow-sm border border-border">
-            <p className="text-textSecondary">Este usuario aún no ha realizado ninguna publicación.</p>
+          <div className="text-center py-12 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <p className="text-gray-500">Este usuario aún no ha realizado ninguna publicación.</p>
           </div>
         )}
       </div>

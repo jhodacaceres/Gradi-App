@@ -80,12 +80,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 <Users className="h-5 w-5" />
                 <span>Grupos de Estudio</span>
               </NavLink>
-
-              {/* Si tienes ruta de archivos */}
-              <NavLink to="/archivos" className={getNavLinkClass} onClick={onClose}>
-                <FolderOpen className="h-5 w-5" />
-                <span>Archivos</span>
-              </NavLink>
             </nav>
 
             <div className="mt-8 mb-4 px-4">

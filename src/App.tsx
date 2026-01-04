@@ -13,7 +13,7 @@ import Tasks from './components/Tasks';
 import Groups from './components/Groups'; // Asegúrate de importar Groups
 import TaskDetail from './pages/TaskDetail';
 import UserProfilePage from './pages/UserProfilePage';
-import UserSettingsPage from './pages/UserSettingsPage';
+import UserSettingsPage from './pages/SettingsPage';
 
 const App = () => {
   const { user, profile, loading, signInWithGoogle, signOut } = useAuth(); 
